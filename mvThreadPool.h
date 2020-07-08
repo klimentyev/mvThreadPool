@@ -318,6 +318,8 @@ namespace Marvel {
         }
 
         ~mvThreadPool() { m_done = true; }
+        
+        const char* getVersion() const { return "v0.2";}
 
         template<typename F>
         std::future<typename std::result_of<F()>::type> submit(F f)
