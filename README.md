@@ -12,7 +12,7 @@ int main()
 {
 
   // create threadpool
-  Marvel::mvThreadPool threadpool();
+  auto threadpool = Marvel::mvThreadPool();
   
   // submit function
   threadpool->submit(&SomeFunction);
