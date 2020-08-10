@@ -1,5 +1,14 @@
 #pragma once
 
+//-----------------------------------------------------------------------------
+// mvThreadPool
+//
+//     - This is a simple thread pool implementation from our repository at
+//       https://github.com/RaylockLLC/mvThreadPool
+//     
+//-----------------------------------------------------------------------------
+
+#include <memory>
 #include <mutex>
 #include <atomic>
 #include <memory>
@@ -133,7 +142,7 @@ namespace Marvel {
         {
             std::unique_lock<std::mutex> head_lock(m_head_mutex);
             m_data_cond.wait(head_lock, [&] {return m_head != get_tail(); });
-            return std::move(head_lock);
+            return head_lock;
         }
 
     private:
@@ -162,11 +171,9 @@ namespace Marvel {
 
         ~mvThreadJoiner()
         {
-            for (int i = 0; i < m_threads.size(); i++)
-            {
-                if (m_threads[i].joinable())
-                    m_threads[i].join();
-            }
+            for (auto& thread : m_threads)
+                if (thread.joinable())
+                    thread.join();
         }
 
     private:
@@ -183,15 +190,15 @@ namespace Marvel {
     {
         struct impl_base {
             virtual void call() = 0;
-            virtual ~impl_base() {}
+            virtual ~impl_base() = default;
         };
 
         template<typename F>
         struct impl_type : impl_base
         {
             F f;
-            impl_type(F&& f) : f(std::move(f)) {}
-            void call() { f(); }
+            explicit impl_type(F&& f) : f(std::move(f)) {}
+            void call() override { f(); }
         };
 
     public:
@@ -201,7 +208,7 @@ namespace Marvel {
         template<typename F>
         mvFunctionWrapper(F&& f) : m_impl(new impl_type<F>(std::move(f))) {}
 
-        mvFunctionWrapper(mvFunctionWrapper&& other)
+        mvFunctionWrapper(mvFunctionWrapper&& other) noexcept
             : m_impl(std::move(other.m_impl))
         {
 
@@ -295,19 +302,24 @@ namespace Marvel {
 
     public:
 
-        mvThreadPool()
-            : m_done(false), m_joiner(m_threads)
+        explicit mvThreadPool(unsigned threadcount = 0) :
+            m_done(false), m_joiner(m_threads)
         {
-            unsigned thread_count = std::thread::hardware_concurrency();
+
+            unsigned thread_count = threadcount;
+
+            if (threadcount == 0)
+                thread_count = std::thread::hardware_concurrency();
+
             try
             {
 
                 for (unsigned i = 0; i < thread_count; ++i)
-                    m_queues.push_back(std::unique_ptr<mvWorkStealingQueue>(new mvWorkStealingQueue));
+                    m_queues.push_back(std::make_unique<mvWorkStealingQueue>());
 
                 for (unsigned i = 0; i < thread_count; ++i)
-                    m_threads.push_back(
-                        std::thread(&mvThreadPool::worker_thread, this, i));
+                    m_threads.emplace_back(
+                        &mvThreadPool::worker_thread, this, i);
 
             }
             catch (...)
@@ -318,13 +330,13 @@ namespace Marvel {
         }
 
         ~mvThreadPool() { m_done = true; }
-        
-        const char* getVersion() const { return "v0.2";}
 
-        template<typename F>
-        std::future<typename std::result_of<F()>::type> submit(F f)
+        static const char* getVersion() { return "v0.2"; }
+
+        template<typename F, typename ...Args>
+        std::future<typename std::invoke_result<F, Args...>::type> submit(F f)
         {
-            typedef typename std::result_of<F()>::type result_type;
+            typedef typename std::invoke_result<F, Args...>::type result_type;
             std::packaged_task<result_type()> task(std::move(f));
             std::future<result_type> res(task.get_future());
             if (m_local_work_queue)
@@ -390,11 +402,12 @@ namespace Marvel {
         std::vector<std::unique_ptr<mvWorkStealingQueue> > m_queues;
         std::vector<std::thread>                           m_threads;
         mvThreadJoiner                                     m_joiner;
-        static thread_local mvWorkStealingQueue*           m_local_work_queue;
+        static thread_local mvWorkStealingQueue* m_local_work_queue;
         static thread_local unsigned                       m_index;
 
     };
 
     thread_local mvWorkStealingQueue* mvThreadPool::m_local_work_queue;
     thread_local unsigned mvThreadPool::m_index;
+
 }
