@@ -44,23 +44,6 @@ namespace Marvel {
         mvQueue(const mvQueue& other) = delete;
         mvQueue& operator=(const mvQueue& other) = delete;
 
-        std::shared_ptr<T> wait_and_pop()
-        {
-            std::unique_ptr<node> const old_head = wait_pop_head();
-            return old_head->data;
-        }
-
-        std::shared_ptr<T> try_pop()
-        {
-            std::unique_ptr<node> const old_head = try_pop_head();
-            return old_head ? old_head->data : std::shared_ptr<T>();
-        }
-
-        void wait_and_pop(T& value)
-        {
-            std::unique_ptr<node> const old_head = wait_pop_head(value);
-        }
-
         bool try_pop(T& value)
         {
             std::unique_ptr<node> const old_head = try_pop_head(value);
@@ -107,14 +90,6 @@ namespace Marvel {
             return old_head;
         }
 
-        std::unique_ptr<node> try_pop_head()
-        {
-            std::lock_guard<std::mutex> head_lock(m_head_mutex);
-            if (m_head.get() == get_tail())
-                return std::unique_ptr<node>();
-            return pop_head();
-        }
-
         std::unique_ptr<node> try_pop_head(T& value)
         {
             std::lock_guard<std::mutex> head_lock(m_head_mutex);
@@ -125,32 +100,12 @@ namespace Marvel {
             return pop_head();
         }
 
-        std::unique_ptr<node> wait_pop_head()
-        {
-            std::unique_lock<std::mutex> head_lock(wait_for_data());
-            return pop_head();
-        }
-
-        std::unique_ptr<node> wait_pop_head(T& value)
-        {
-            std::unique_lock<std::mutex> head_lock(wait_for_data());
-            value = std::move(*m_head->data);
-            return pop_head();
-        }
-
-        std::unique_lock<std::mutex> wait_for_data()
-        {
-            std::unique_lock<std::mutex> head_lock(m_head_mutex);
-            m_data_cond.wait(head_lock, [&] {return m_head != get_tail(); });
-            return head_lock;
-        }
-
     private:
 
         std::mutex              m_head_mutex;
         std::mutex              m_tail_mutex;
         std::unique_ptr<node>   m_head;
-        node* m_tail;
+        node*                   m_tail;
         std::condition_variable m_data_cond;
 
     };
@@ -331,7 +286,7 @@ namespace Marvel {
 
         ~mvThreadPool() { m_done = true; }
 
-        static const char* getVersion() { return "v0.2"; }
+        static const char* getVersion() { return "v0.3"; }
 
         template<typename F, typename ...Args>
         std::future<typename std::invoke_result<F, Args...>::type> submit(F f)
@@ -402,12 +357,11 @@ namespace Marvel {
         std::vector<std::unique_ptr<mvWorkStealingQueue> > m_queues;
         std::vector<std::thread>                           m_threads;
         mvThreadJoiner                                     m_joiner;
-        static thread_local mvWorkStealingQueue* m_local_work_queue;
+        static thread_local mvWorkStealingQueue*           m_local_work_queue;
         static thread_local unsigned                       m_index;
 
     };
 
     thread_local mvWorkStealingQueue* mvThreadPool::m_local_work_queue;
     thread_local unsigned mvThreadPool::m_index;
-
 }
