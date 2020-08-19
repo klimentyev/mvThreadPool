@@ -24,95 +24,6 @@ namespace Marvel {
     //-----------------------------------------------------------------------------
     // mvThreadJoiner
     //-----------------------------------------------------------------------------
-    template<typename T>
-    class mvQueue
-    {
-
-    public:
-
-        struct node
-        {
-            std::shared_ptr<T>    data;
-            std::unique_ptr<node> next;
-        };
-
-    public:
-
-        mvQueue() : m_head(new node), m_tail(m_head.get()) {}
-
-        // copy assignment and constructor deleted
-        mvQueue(const mvQueue& other) = delete;
-        mvQueue& operator=(const mvQueue& other) = delete;
-
-        bool try_pop(T& value)
-        {
-            std::unique_ptr<node> const old_head = try_pop_head(value);
-            if (old_head)
-                return true;
-            return false;
-        }
-
-        void push(T value)
-        {
-            std::shared_ptr<T> new_data = std::make_shared<T>(std::move(value));
-            std::unique_ptr<node> p(new node);
-
-            // scoped in order to unlock tail mutex before notifying other threads
-            {
-                std::lock_guard<std::mutex> tail_lock(m_tail_mutex);
-                m_tail->data = new_data;
-                node* const new_tail = p.get();
-                m_tail->next = std::move(p);
-                m_tail = new_tail;
-            }
-
-            m_data_cond.notify_one();
-        }
-
-        bool empty()
-        {
-            std::lock_guard<std::mutex> head_lock(m_head_mutex);
-            return (m_head == get_tail());
-        }
-
-    private:
-
-        node* get_tail()
-        {
-            std::lock_guard<std::mutex> tail_lock(m_tail_mutex);
-            return m_tail;
-        }
-
-        std::unique_ptr<node> pop_head()
-        {
-            std::unique_ptr<node> old_head = std::move(m_head);
-            m_head = std::move(old_head->next);
-            return old_head;
-        }
-
-        std::unique_ptr<node> try_pop_head(T& value)
-        {
-            std::lock_guard<std::mutex> head_lock(m_head_mutex);
-            if (m_head.get() == get_tail())
-                return std::unique_ptr<node>();
-
-            value = std::move(*m_head->data);
-            return pop_head();
-        }
-
-    private:
-
-        std::mutex              m_head_mutex;
-        std::mutex              m_tail_mutex;
-        std::unique_ptr<node>   m_head;
-        node*                   m_tail;
-        std::condition_variable m_data_cond;
-
-    };
-
-    //-----------------------------------------------------------------------------
-    // mvThreadJoiner
-    //-----------------------------------------------------------------------------
     class mvThreadJoiner
     {
 
@@ -143,7 +54,8 @@ namespace Marvel {
     //-----------------------------------------------------------------------------
     class mvFunctionWrapper
     {
-        struct impl_base {
+        struct impl_base 
+        {
             virtual void call() = 0;
             virtual ~impl_base() = default;
         };
@@ -353,7 +265,7 @@ namespace Marvel {
     private:
 
         std::atomic_bool                                   m_done;
-        mvQueue<task_type>                                 m_pool_work_queue;
+        mvWorkStealingQueue                                m_pool_work_queue;
         std::vector<std::unique_ptr<mvWorkStealingQueue> > m_queues;
         std::vector<std::thread>                           m_threads;
         mvThreadJoiner                                     m_joiner;
