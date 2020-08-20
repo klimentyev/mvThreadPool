@@ -1,7 +1,7 @@
 # mvThreadPool
 <sub>(This library is available under a free and permissive license)</sub>
 
-mvThreadPool is a **simple to use header only C++ threadpool**.
+mvThreadPool is a **simple to use header only C++ threadpool** based on work by [Anthony Williams](https://github.com/anthonywilliams)
 
 ### Usage
 To use this library, just include _mvThreadPool.h_ in your project. The basic usage can be seen below:
