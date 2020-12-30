@@ -1,13 +1,5 @@
 #pragma once
 
-//-----------------------------------------------------------------------------
-// mvThreadPool
-//
-//     - This is a simple thread pool implementation from our repository at
-//       https://github.com/RaylockLLC/mvThreadPool
-//     
-//-----------------------------------------------------------------------------
-
 #include <memory>
 #include <mutex>
 #include <atomic>
